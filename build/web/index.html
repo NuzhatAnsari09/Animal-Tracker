@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animal GPS Tracker</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=&libraries=geometry&callback=initMap" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8fafc;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border-radius: 15px;
+        }
+
+        h1 {
+            color: #34495e;
+            text-align: center;
+            margin-bottom: 40px;
+            font-weight: 700;
+            font-size: 2.5rem;
+            letter-spacing: 1px;
+        }
+
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        #map:hover {
+            transform: scale(1.02);
+        }
+
+        .info-panel {
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 30px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .info-panel:hover {
+            transform: translateY(-5px);
+        }
+
+        h3 {
+            color: #34495e;
+            font-weight: 600;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .animal-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .animal-item {
+            background-color: #ecf0f1;
+            border-radius: 20px;
+            padding: 10px 15px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .animal-item:hover {
+            background-color: #dfe4e8;
+        }
+
+        .animal-item.active {
+            background-color: #3498db;
+            color: white;
+        }
+
+        #chart-container {
+            margin-top: 20px;
+            height: 300px;
+        }
+
+        .stat-item {
+            background-color: #f0f4f8;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .stat-item:hover {
+            background-color: #e2e8f0;
+        }
+
+        .stat-label {
+            font-weight: 600;
+            color: #34495e;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.2rem;
+            color: #3498db;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .map-container,
+        .chart-container {
+            grid-column: span 2;
+        }
+
+        .animal-list-container,
+        .stats-container {
+            grid-column: span 1;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .map-container,
+            .chart-container,
+            .animal-list-container,
+            .stats-container {
+                grid-column: span 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Animal GPS Tracker</h1>
+        <div class="dashboard">
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+            <div class="animal-list-container info-panel">
+                <h3>Tracked Animals</h3>
+                <div class="animal-list" id="animal-list"></div>
+            </div>
+            <div class="stats-container info-panel">
+                <h3>Statistics</h3>
+                <div class="stat-item">
+                    <div class="stat-label">Total Animals Tracked</div>
+                    <div class="stat-value" id="total-animals">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Food Eaten</div>
+                    <div class="stat-value" id="food-eaten">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Food Missed</div>
+                    <div class="stat-value" id="food-missed">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Inner Circle Touches</div>
+                    <div class="stat-value" id="inner-circle-touches">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Outer Circle Touches</div>
+                    <div class="stat-value" id="outer-circle-touches">0</div>
+                </div>
+            </div>
+            <div class="chart-container info-panel">
+                <h3>Movement Chart</h3>
+                <div id="chart-container">
+                    <canvas id="movement-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const animals = [
+            { callerId: 'Lion001', name: 'Lion 1', lat: 19.2183, lng: 72.9145, color: '#FF5733', icon: '🦁', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+            { callerId: 'Lion002', name: 'Lion 2', lat: 19.2270, lng: 72.9052, color: '#FF5733', icon: '🦁', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+            { callerId: 'Tiger001', name: 'Tiger', lat: 19.2154, lng: 72.9220, color: '#FFC300', icon: '🐅', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+            { callerId: 'Deer001', name: 'Deer 1', lat: 19.2090, lng: 72.9130, color: '#DAF7A6', icon: '🦌', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+            { callerId: 'Deer002', name: 'Deer 2', lat: 19.2240, lng: 72.9180, color: '#DAF7A6', icon: '🦌', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+            { callerId: 'Elephant001', name: 'Elephant 1', lat: 19.2210, lng: 72.9090, color: '#3498db', icon: '🐘', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+            { callerId: 'Elephant002', name: 'Elephant 2', lat: 19.2300, lng: 72.9250, color: '#3498db', icon: '🐘', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+            { callerId: 'Elephant003', name: 'Elephant 3', lat: 19.2130, lng: 72.9280, color: '#3498db', icon: '🐘', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+            { callerId: 'Giraffe001', name: 'Giraffe', lat: 19.2060, lng: 72.9210, color: '#FF5733', icon: '🦒', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+            { callerId: 'Monkey001', name: 'Monkey', lat: 19.2200, lng: 72.9160, color: '#FFC300', icon: '🐒', eatenFood: 0, missedFood: 0, innerTouches: 0, outerTouches: 0 },
+        ];
+
+        const persons = [
+            { name: 'Person 1', lat: 19.2180, lng: 72.9150 },
+            { name: 'Person 2', lat: 19.2200, lng: 72.9170 },
+            { name: 'Person 3', lat: 19.2220, lng: 72.9190 },
+            { name: 'Person 4', lat: 19.2230, lng: 72.9110 },
+            { name: 'Person 5', lat: 19.2240, lng: 72.9120 },
+        ];
+
+        let map;
+        let markers = {};
+        let innerCircle;
+        let outerCircle;
+        let chart;
+        let activeAnimal = null;
+
+        let foodEaten = 0;
+        let foodMissed = 0;
+
+        function initMap() {
+            const mapOptions = {
+                center: { lat: 19.2183, lng: 72.9145 },
+                zoom: 13,
+                mapTypeId: 'roadmap',
+                styles: [
+                    {
+                        featureType: "all",
+                        elementType: "labels",
+                        stylers: [{ visibility: "off" }]
+                    }
+                ]
+            };
+
+            map = new google.maps.Map(document.getElementById('map'), mapOptions);
+
+            animals.forEach(animal => {
+                const marker = new google.maps.Marker({
+                    position: { lat: animal.lat, lng: animal.lng },
+                    map,
+                    title: animal.name,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: animal.color,
+                        fillOpacity: 0.8,
+                        strokeWeight: 1
+                    }
+                });
+
+                markers[animal.callerId] = marker;
+                updateAnimalMovement(animal, marker);
+            });
+
+            // Add persons to the inner circle
+            persons.forEach(person => {
+                new google.maps.Marker({
+                    position: { lat: person.lat, lng: person.lng },
+                    map,
+                    title: person.name,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 6,
+                        fillColor: '#FFA500', // Color for persons
+                        fillOpacity: 0.8,
+                        strokeWeight: 1
+                    }
+                });
+            });
+
+            innerCircle = new google.maps.Circle({
+                strokeColor: '#FF0000',
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: '#FF0000',
+                fillOpacity: 0.35,
+                map,
+                center: mapOptions.center,
+                radius: 500 // Inner circle radius
+            });
+
+            outerCircle = new google.maps.Circle({
+                strokeColor: '#008000',
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: '#008000',
+                fillOpacity: 0.35,
+                map,
+                center: mapOptions.center,
+                radius: 1000 // Outer circle radius
+            });
+
+            updateAnimalList();
+            initializeChart();
+
+            // Start food throwing simulation
+            setInterval(throwFood, 2000);
+        }
+
+        function updateAnimalList() {
+            const animalList = document.getElementById('animal-list');
+            animalList.innerHTML = '';
+
+            animals.forEach((animal) => {
+                const item = document.createElement('div');
+                item.classList.add('animal-item');
+                item.textContent = `${ animal.icon } ${ animal.name }`;
+                item.style.borderLeft =` 5px solid ${ animal.color }`;
+
+                item.onclick = () => {
+                    if (activeAnimal === animal.callerId) {
+                        deactivateAnimal();
+                    } else {
+                        activateAnimal(animal.callerId);
+                    }
+                };
+
+                if (activeAnimal === animal.callerId) {
+                    item.classList.add('active');
+                }
+
+                animalList.appendChild(item);
+            });
+
+            document.getElementById('total-animals').textContent = animals.length;
+        }
+
+
+        function activateAnimal(callerId) {
+            deactivateAnimal();
+
+            activeAnimal = callerId;
+            const animal = animals.find(a => a.callerId === callerId);
+            const marker = markers[callerId];
+
+            map.setCenter(marker.getPosition());
+            marker.setAnimation(google.maps.Animation.BOUNCE);
+            updateChartForAnimal(animal);
+        }
+
+        function deactivateAnimal() {
+            if (activeAnimal) {
+                markers[activeAnimal].setAnimation(null);
+                activeAnimal = null;
+            }
+            resetChart();
+        }
+
+        function initializeChart() {
+            const ctx = document.getElementById('movement-chart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Distance',
+                        backgroundColor: '#3498db',
+                        borderColor: '#3498db',
+                        data: []
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            beginAtZero: true
+                        },
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        function updateChartForAnimal(animal) {
+            const data = {
+                labels: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5'],
+                datasets: [{
+                    label: `Movement of ${ animal.name }`, // Use backticks for template literals
+                    backgroundColor: animal.color,
+                    borderColor: animal.color,
+                    data: [2, 3, 1.5, 5, 4] // Example data
+                }]
+        };
+
+        chart.data = data;
+        chart.update();
+        }
+
+        function resetChart() {
+            chart.data = { labels: [], datasets: [] };
+            chart.update();
+        }
+
+        function updateAnimalMovement(animal, marker) {
+            setInterval(() => {
+                // Simulate random movement within the space between the inner and outer circle
+                const latChange = (Math.random() - 0.5) * 0.001;
+                const lngChange = (Math.random() - 0.5) * 0.001;
+                const newPos = {
+                    lat: marker.getPosition().lat() + latChange,
+                    lng: marker.getPosition().lng() + lngChange
+                };
+
+                // Check if animal is outside the outer circle or inside the inner circle
+                const distanceFromCenter = google.maps.geometry.spherical.computeDistanceBetween(
+                    new google.maps.LatLng(newPos.lat, newPos.lng),
+                    innerCircle.getCenter()
+                );
+
+                // Ensure the animal stays outside the inner circle
+                if (distanceFromCenter < innerCircle.getRadius()) {
+                    // Animal touched the inner circle
+                    animal.innerTouches += 1;
+                    document.getElementById('inner-circle-touches').textContent = ++animal.innerTouches;
+                    // Move back to the position before crossing
+                    newPos.lat = marker.getPosition().lat();
+                    newPos.lng = marker.getPosition().lng();
+                } else if (distanceFromCenter > outerCircle.getRadius()) {
+                    // Animal touched the outer circle
+                    animal.outerTouches += 1;
+                    document.getElementById('outer-circle-touches').textContent = ++animal.outerTouches;
+                    // Move back to the position before crossing
+                    newPos.lat = marker.getPosition().lat();
+                    newPos.lng = marker.getPosition().lng();
+                }
+
+                // Move the marker to the new position
+                marker.setPosition(newPos);
+            }, 1000);
+        }
+
+        function throwFood() {
+            persons.forEach(person => {
+                const randomAnimalIndex = Math.floor(Math.random() * animals.length);
+                const animal = animals[randomAnimalIndex];
+                const foodThrown = Math.random() < 0.5; // 50% chance of the animal eating the food
+
+                if (foodThrown) {
+                    animal.eatenFood++;
+                    foodEaten++;
+                } else {
+                    animal.missedFood++;
+                    foodMissed++;
+                }
+
+                // Update the statistics display
+                document.getElementById('food-eaten').textContent = foodEaten;
+                document.getElementById('food-missed').textContent = foodMissed;
+            });
+        }
+    </script>
+</body>
+
+</html>
